@@ -187,10 +187,8 @@ Metrics:
 * PR AUC
 * Anomaly score histograms
 
-> 📌 **TODO:** Add your results here
->
-> * ROC AUC: **??%**
-> * PR AUC: **??%**
+
+
 
 ---
 
@@ -234,6 +232,14 @@ On a held-out evaluation using the synthetic labels:
 
 These results show a clear separation between normal and flaky-like test executions in the latent space of the neural encoder, indicating that the model successfully learns unstable execution patterns directly from raw logs.
 
+## Score Distribution
+![Score Distribution](/src/images/score_distribution.png)
+
+## ROC Curve
+![ROC Curve](/src/images/roc_curve.png)
+
+## Precision–Recall Curve
+![PR Curve](/src/images/pr_curve.png)
 
 ---
 
