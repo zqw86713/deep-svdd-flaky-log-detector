@@ -259,10 +259,3 @@ Flaky test detection usually requires:
 
 
 
-
-# 🧾 License
-
-MIT
-
----
-
