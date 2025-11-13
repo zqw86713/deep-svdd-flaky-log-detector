@@ -1,5 +1,6 @@
 # src/ci_demo/run_ci_pipeline.py
 
+import argparse
 import json
 from pathlib import Path
 
@@ -7,54 +8,81 @@ import numpy as np
 import torch
 import joblib
 
-from ..config import Config, PROJECT_ROOT
-from ..preprocessing import tokenize_line, encode_tokens
-from ..models.encoder import LogEncoder
+from src.config import Config
+from src.preprocessing import tokenize_log_file, encode_tokens
+from src.models.encoder import LogEncoder
+from src.models.deep_svdd import SimpleSVDD
 
-THRESHOLD = 0.5  # Example threshold after normalization or use model's built-in
 
-def load_vocab() -> dict:
-    vocab_path = PROJECT_ROOT / "data" / "processed" / "vocab.json"
-    return json.loads(vocab_path.read_text(encoding="utf-8"))
+def load_vocab():
+    vocab_path = Config.PROCESSED_DIR / "vocab.json"
+    vocab = json.loads(vocab_path.read_text(encoding="utf-8"))
+    return vocab
 
-def load_models(vocab_size: int):
-    device = torch.device(Config.DEVICE)
-    encoder = LogEncoder(vocab_size=vocab_size).to(device)
-    encoder.load_state_dict(torch.load(PROJECT_ROOT / "data" / "processed" / "encoder.pt", map_location=device))
+
+def load_encoder(vocab_size: int, device: torch.device) -> LogEncoder:
+    encoder = LogEncoder(
+        vocab_size=vocab_size,
+        embedding_dim=Config.EMBEDDING_DIM,
+        hidden_dim=Config.HIDDEN_DIM,
+        num_layers=Config.NUM_LAYERS,
+        dropout=Config.DROPOUT,
+    ).to(device)
+
+    state_dict = torch.load(Config.PROCESSED_DIR / "encoder.pt", map_location=device)
+    encoder.load_state_dict(state_dict)
     encoder.eval()
+    return encoder
 
-    svdd = joblib.load(PROJECT_ROOT / "data" / "processed" / "deep_svdd.pkl")
-    return encoder, svdd, device
 
-def score_log(log_path: Path):
+def load_svdd() -> SimpleSVDD:
+    svdd: SimpleSVDD = joblib.load(Config.PROCESSED_DIR / "deep_svdd.pkl")
+    return svdd
+
+
+def score_single_log(log_path: Path):
+    device = torch.device(Config.DEVICE)
+
+    # 1. 加载 vocab / encoder / svdd
     vocab = load_vocab()
-    encoder, svdd, device = load_models(len(vocab))
+    encoder = load_encoder(len(vocab), device)
+    svdd = load_svdd()
 
-    text = log_path.read_text(encoding="utf-8", errors="ignore")
-    tokens = tokenize_line(text)
+    # 2. 读取并 token 化日志
+    tokens = tokenize_log_file(log_path)
     input_ids = encode_tokens(tokens, vocab, max_len=Config.MAX_SEQ_LEN)
+    x = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0).to(device)  # (1, seq_len)
 
-    x = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0).to(device)
-
+    # 3. 生成 embedding
     with torch.no_grad():
-        emb = encoder(x)
-        score = svdd.decision_scores(emb.cpu().numpy())[0]
+        emb = encoder(x)               # (1, D)
+        emb_np = emb.cpu().numpy()     # (1, D)
+
+    # 4. 计算 anomaly score + 预测
+    score = float(svdd.decision_scores(emb_np)[0])
+    label = int(svdd.predict(emb_np)[0])  # 1 = anomaly (flaky-like), 0 = normal
 
     result = {
-        "log_file": log_path.name,
-        "anomaly_score": float(score),
-        "flagged_as_flaky_like": bool(score > THRESHOLD),
+        "log_file": str(log_path),
+        "anomaly_score": score,
+        "flagged_as_flaky_like": bool(label),
     }
 
     print(json.dumps(result, indent=2))
     return result
 
-if __name__ == "__main__":
-    # Example usage: python -m src.ci_demo.run_ci_pipeline --log data/raw_logs/sample.log
-    import argparse
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--log", type=str, required=True, help="Path to test log file")
+def main():
+    parser = argparse.ArgumentParser(description="Score a single test log with SimpleSVDD.")
+    parser.add_argument("--log", type=str, required=True, help="Path to a .log file")
     args = parser.parse_args()
 
-    score_log(Path(args.log))
+    log_path = Path(args.log)
+    if not log_path.exists():
+        raise FileNotFoundError(f"Log file not found: {log_path}")
+
+    score_single_log(log_path)
+
+
+if __name__ == "__main__":
+    main()
