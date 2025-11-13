@@ -5,12 +5,17 @@ from typing import List, Dict, Optional
 
 import torch
 from torch.utils.data import Dataset, DataLoader
+import pandas as pd
 
-from .preprocessing import tokenize_line, encode_tokens
+from .preprocessing import tokenize_log_file, encode_tokens
 from .config import Config
 
 class LogDataset(Dataset):
-    """Dataset for log files. Each sample is a single test log file."""
+    """
+    每个样本 = 一个 log 文件。
+    x = token id 序列
+    y = label (0=normal, 1=flaky)，如果没有就 -1
+    """
 
     def __init__(
         self,
@@ -19,12 +24,6 @@ class LogDataset(Dataset):
         labels: Optional[Dict[str, int]] = None,
         max_len: int = Config.MAX_SEQ_LEN,
     ):
-        """
-        Args:
-            log_paths: list of paths to log files.
-            vocab: token vocabulary mapping.
-            labels: optional mapping from log filename → label (0 normal, 1 anomaly).
-        """
         self.log_paths = log_paths
         self.vocab = vocab
         self.labels = labels or {}
@@ -33,24 +32,22 @@ class LogDataset(Dataset):
     def __len__(self) -> int:
         return len(self.log_paths)
 
-    def _read_log(self, path: Path) -> str:
-        with path.open("r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
-
     def __getitem__(self, idx: int):
         path = self.log_paths[idx]
-        text = self._read_log(path)
-        tokens = tokenize_line(text)
+        tokens = tokenize_log_file(path)
         input_ids = encode_tokens(tokens, self.vocab, self.max_len)
-
         x = torch.tensor(input_ids, dtype=torch.long)
 
-        # Optional label (for evaluation)
         fname = path.name
-        y = self.labels.get(fname, -1)  # -1 means "unlabeled"
+        y = self.labels.get(fname, -1)
         y = torch.tensor(y, dtype=torch.long)
-
         return x, y, fname
+
+def load_labels(label_csv: Path) -> Dict[str, int]:
+    """从 labels.csv 读取 filename → label 映射。"""
+    df = pd.read_csv(label_csv)
+    mapping = dict(zip(df["filename"], df["label"]))
+    return mapping
 
 def create_dataloader(
     log_dir: Path,
