@@ -12,8 +12,6 @@ torchvision==0.17.2
 # Neural network log encoder (LSTM)
 # (Already included via torch)
 
-# Anomaly detection
-pyod==1.1.3
 
 # Visualization (optional but recommended)
 matplotlib==3.8.4
