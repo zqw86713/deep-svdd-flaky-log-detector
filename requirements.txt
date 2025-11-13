@@ -1,0 +1,37 @@
+# Core Python scientific stack
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+scipy==1.13.1
+
+# PyTorch (CPU)
+torch==2.2.2
+torchaudio==2.2.2
+torchvision==0.17.2
+
+# Neural network log encoder (LSTM)
+# (Already included via torch)
+
+# Anomaly detection
+pyod==1.1.3
+
+# Visualization (optional but recommended)
+matplotlib==3.8.4
+seaborn==0.13.2
+
+# Utility
+tqdm==4.66.4
+joblib==1.4.2
+
+# CI demo & general tooling
+pyyaml==6.0.1
+
+# Optional: jupyter notebooks for EDA
+jupyterlab==4.2.2
+notebook==7.2.1
+
+
+# For GPU support, uncomment the following lines and ensure you have the appropriate CUDA version installed.
+torch==2.2.2+cu118
+torchvision==0.17.2+cu118
+torchaudio==2.2.2+cu118
